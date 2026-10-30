@@ -4,8 +4,9 @@ library(tidyverse)
 
 library(survey)
 library(srvyr)
+library(calidad)
 
-# Bases de datos ####
+# Descargar Bases de datos ####
 dir.create("bd")
 
 ## ENADEL 2024 (7.0 MB)
@@ -20,7 +21,13 @@ download.file("https://www.subtrab.gob.cl/wp-content/uploads/2025/05/Libro_de_co
 ## Informe de resultados 2024 (3.8 MB)
 download.file("https://www.subtrab.gob.cl/wp-content/uploads/2025/06/Informe-Final-de-Resultados.pdf", "bd/Informe-Final-de-Resultados.pdf", mode="wb")
 
-# Cálculos
+## ENADEL 2025
+#descargar zip file y descomprimir en directorio de trabajo
+download.file("https://www.subtrab.gob.cl/wp-content/uploads/2026/08/FORMATO-CSV-ENADEL.zip" , "bd/FORMATO-CSV-ENADEL.zip", mode="wb") 
+#descomprimir el archivo zip
+unzip("bd/FORMATO-CSV-ENADEL.zip", exdir = "bd/ENADEL_2025")
+
+# Cálculos 2024 ####
 ENADEL_2024 <- read_csv("bd/ENADEL_2024_externa.csv")
 
 # Recodificar glosas de CIIU
@@ -49,14 +56,16 @@ ENADEL_2024 <- ENADEL_2024 |>
   ))
 
 
-# Aplicar Factor de expansion ####
+## Aplicar Factor de expansion ####
 # Según el documento metodológico de ENADEL 2024, el diseño muestral es probabilístico y estratificado, con estratos definidos por las 16 regiones y 12 agrupaciones de ramas de actividad económica, pero no se menciona un nivel de conglomerado específico (clusters). Por tanto, no hay una variable conglomerado oficial en los datos.
+
+str(ENADEL_2024)
 
 svydsgn <- ENADEL_2024 %>% as_survey_design(ids = idempresa_ficticio, # o usar ids = 1
                                             weights = fact_emp, 
                                             strata = estrato)
 
-# Estimación de Totales ####
+## Estimación de Totales ####
 total_trab <- svydsgn |> summarise(estimacion = survey_total(b6_1, vartype = c("cv", "se"), na.rm = TRUE),
                                    n = unweighted(n()))
 
@@ -73,7 +82,7 @@ total_vacantes <-  svydsgn |> summarise(estimacion = survey_total(b7_1, vartype 
 cv3 <- as.numeric(total_vacantes[2])
 #write_csv(total_vacantes, "bd/pais_vacantes.csv")
 
-# Empresas por región ####
+## Empresas por región ####
 nro_empresas <- svydsgn |>
   group_by(region) |>
   summarise(`N° empresas` = survey_total(vartype = "cv"),
@@ -105,7 +114,7 @@ knitr::kable(nro_empresas_final,
 #write_csv(nro_empresas_final, "bd/pais_empresas.csv")
 rm(total_pais, nro_empresas)
 
-#Trabajadores por región ####
+##Trabajadores por región ####
 
 nro_trabajadores <- 
 svydsgn |>
@@ -139,7 +148,7 @@ knitr::kable(nro_trabajadores_final,
 
 rm(total_pais, nro_trabajadores)
 
-#Vacantes por región ####
+##Vacantes por región ####
 
 nro_vacantes <- 
   svydsgn |>
@@ -151,6 +160,8 @@ nro_vacantes <-
          `CV` = `N° vacantes actuales_cv`) |>
   arrange(desc(`N° vacantes actuales`)) |>
   select(Región, `Tamaño muestral`, `N° vacantes actuales`, `Distribución %`, `CV`)
+
+vacantes_2024 <- nro_vacantes
 
 total_pais <- 
   nro_vacantes |>
@@ -174,7 +185,7 @@ knitr::kable(nro_vacantes_final,
 rm(nro_vacantes, total_pais)
 
 
-# Empresas por CIIU####
+## Empresas por CIIU####
 
 nro_empresas_CIIU <- svydsgn |>
   group_by(a1_glosa_corta_CIIU) |>
@@ -209,7 +220,7 @@ knitr::kable(nro_empresas_CIIU_final,
 rm(total_pais, nro_empresas_CIIU)
 
 
-# Trabajadores por CIIU ####
+## Trabajadores por CIIU ####
 
 nro_trabajadores_ciuu <- 
   svydsgn |>
@@ -242,10 +253,10 @@ knitr::kable(nro_trabajadores_ciuu_final,
 
 rm(total_pais, nro_trabajadores_ciuu)
 
-# Filtro region ######
+## Filtro region ######
 reg_filtro <- 10
 
-# Empresas por region ####
+## Empresas por region ####
 
 empr_reg1 <- svydsgn |>
   filter(region == reg_filtro) |>
@@ -282,7 +293,7 @@ knitr::kable(nro_empr_reg,
 
 rm(empr_reg, empr_reg1, empr_reg2, cv_temp, temp1, temp2, temp)
 
-# Trabajadores por region segun CIIU ####
+## Trabajadores por region segun CIIU ####
 trab_ciuu_reg1 <-
   svydsgn |>
   filter(region == reg_filtro) |>
@@ -321,7 +332,7 @@ knitr::kable(nro_trab_ciuu_reg,
 
 rm(trab_ciuu_reg, trab_ciuu_reg2, trab_ciuu_reg1, cv_temp )
 
-# Vacantes ####
+## Vacantes ####
 vac <- 
   svydsgn |>
   filter(region == reg_filtro) |>
@@ -361,3 +372,135 @@ knitr::kable(temp2,
 rm(trab_ciuu_reg, trab_ciuu_reg2, trab_ciuu_reg1, cv_temp )
 
 R.version$version.string
+
+# Calculos 2025 ####
+base_enadel <- read_csv("bd/ENADEL_2025/ENADEL_2025.csv")
+
+base_enadel_svy <- base_enadel |> 
+  as_survey_design( 
+    ids = varunit, # Unidad Primaria de Muestreo 
+    strata = varstrat, # Pseudoestratos (327 niveles) 
+    weights = pond_final # Factor de expansión calibrado 
+  ) 
+
+options(survey.lonely.psu = "certainty") 
+## Estimación de Totales ####
+
+# Se mantiene varstrat como estrato colapsado para la estimación de varianza. 
+# dentro de varstrat y generar un warning en survey. 
+# Se acepta esta inconsistencia de forma deliberada. 
+
+# Estimación de suma y proporción con intervalos de confianza en R (srvyr) ---- 
+estimaciones <- base_enadel_svy |> 
+  summarise( 
+    # Dotación de personal (total) 
+    dotacion_total = survey_total(b6_1, na.rm = FALSE, vartype = "ci"), 
+    # Dotación de personal (media) 
+    dotacion_media = survey_mean(b6_1, na.rm = FALSE, vartype = "ci"), 
+    # Capacitaciones 
+    capacitacion_prop = survey_mean(d9 == 1, na.rm = FALSE, vartype = "ci") 
+  ) 
+
+estimaciones 
+
+# Calidad ---- 
+
+# b6_1: total de una variable continua 
+dotacion_total <- create_total(var = "b6_1", design = base_enadel_svy)
+evaluacion_dotacion_total <- assess(dotacion_total)
+
+vacantes_total <- create_total(var = "b11_1", design = base_enadel_svy)
+evaluacion_dotacion_total <- assess(vacantes_total)
+
+knitr::kable(evaluacion_dotacion_total, 
+             digits=2,
+             align=rep('c', 5),
+             format.args = list(decimal.mark = ',', big.mark = "."))
+
+
+# b11_1: proporción sobre una dummy 
+# la dummy debe representar la categoría de interés, por ejemplo Sí == 1 
+base_enadel_svy$variables$b11_1_si <- if_else(base_enadel_svy$variables$b11_1 == 1, 1, 0)
+capacitacion_prop <- create_prop(var = "b11_1_si", domains = "reg_encuesta", design = base_enadel_svy)
+evaluacion_capacitacion_prop <- assess(capacitacion_prop)
+view(evaluacion_capacitacion_prop)
+
+## Estimación ####
+dotacion_pais <- base_enadel_svy |> 
+  summarise(estimacion = survey_total(b6_1, #Dotación total de trabajadores
+                                      vartype = c("ci", "cv", "se"), 
+                                      na.rm = TRUE), n = unweighted(n()))
+
+empresas_pais <- base_enadel_svy |> 
+  summarise(estimacion = survey_total(vartype = c("ci", "cv", "se"), #Empresas
+                                      na.rm = TRUE), n = unweighted(n()))
+
+vacantes_pais <- base_enadel_svy |>
+  summarise(estimacion = survey_total(b11_1, #Vacantes
+                                      vartype = c("ci", "cv", "se"),
+                                      na.rm = TRUE), n = unweighted(n()))
+
+### Vacantes####
+nro_vacantes <- 
+  base_enadel_svy |>
+  group_by(reg_encuesta) |>
+  summarise(`N° vacantes actuales` = survey_total(b11_1, vartype = "cv"),
+            `Tamaño muestral` = unweighted(n())) |>
+  mutate(`Distribución %` = `N° vacantes actuales`/sum(`N° vacantes actuales`) *100,
+         Región = reg_encuesta,
+         `CV` = `N° vacantes actuales_cv`) |>
+  arrange(desc(`N° vacantes actuales`)) |>
+  select(Región, `Tamaño muestral`, `N° vacantes actuales`, `Distribución %`, `CV`)
+
+vacantes_2025 <- nro_vacantes
+
+
+total_pais <- 
+  nro_vacantes |>
+  summarise(`Región` = 0,
+            `Tamaño muestral` = sum(`Tamaño muestral`),
+            `N° vacantes actuales`= sum(`N° vacantes actuales`),
+            `Distribución %` = sum(`Distribución %`),
+            CV= as.numeric(vacantes_pais[4]))
+
+# Unir tabla principal con totales
+nro_vacantes_final <- bind_rows(nro_vacantes, total_pais)
+nro_vacantes_final$Región[17] <- c("Total")
+
+knitr::kable(nro_vacantes_final, 
+             digits=2,
+             align=rep('c', 5),
+             format.args = list(decimal.mark = ',', big.mark = "."))
+
+#write_csv(nro_vacantes_final, "bd/pais_vacantes.csv")
+rm(nro_vacantes, total_pais)
+
+# Variacion anual ----
+# 
+temp1 <- vacantes_2024 %>% select(Región, `N° vacantes actuales`)
+names(temp1) <- c("Región", "Vacantes 2024")
+
+temp2 <- vacantes_2025 %>% select(Región, `N° vacantes actuales`)
+names(temp2) <- c("Región", "Vacantes 2025")
+
+df <- merge(temp1, temp2, by = "Región")
+
+df$Var.abs <- as.numeric(
+  df$`Vacantes 2025` - df$`Vacantes 2024`) # Variación Absoluta
+
+df$Var.rel <- as.numeric(
+  ((df$`Vacantes 2025`/df$`Vacantes 2024`)-1)*100) # Variación Relativa %
+
+df$Participación <- as.numeric(
+  df$`Vacantes 2025`/sum(df$`Vacantes 2025`)*100)  # Participación
+
+df$Incidencias <- as.numeric(
+  df$`Vacantes 2024`*df$Var.rel/df$`Vacantes 2025`) # Incidencias
+
+df <- df |> arrange(desc(Participación))
+
+knitr::kable(df, 
+             digits=1,
+             align=rep('c', 5),
+             format.args = list(decimal.mark = ',', big.mark = "."))
+R.version
