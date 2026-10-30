@@ -426,6 +426,8 @@ evaluacion_capacitacion_prop <- assess(capacitacion_prop)
 view(evaluacion_capacitacion_prop)
 
 ## Estimación ####
+
+#metodo 1
 dotacion_pais <- base_enadel_svy |> 
   summarise(estimacion = survey_total(b6_1, #Dotación total de trabajadores
                                       vartype = c("ci", "cv", "se"), 
@@ -440,6 +442,12 @@ vacantes_pais <- base_enadel_svy |>
                                       vartype = c("ci", "cv", "se"),
                                       na.rm = TRUE), n = unweighted(n()))
 
+#metodo 2
+assess(create_total(var = "b6_1", design = base_enadel_svy)) #Dotación
+assess(create_total(var = "b11_1", design = base_enadel_svy)) #Vacantes
+base_enadel_svy <- update(base_enadel_svy, con_empresa = 1)
+assess(create_total(var = "con_empresa", design = base_enadel_svy)) #Empresas
+
 ### Vacantes####
 nro_vacantes <- 
   base_enadel_svy |>
@@ -453,7 +461,6 @@ nro_vacantes <-
   select(Región, `Tamaño muestral`, `N° vacantes actuales`, `Distribución %`, `CV`)
 
 vacantes_2025 <- nro_vacantes
-
 
 total_pais <- 
   nro_vacantes |>
